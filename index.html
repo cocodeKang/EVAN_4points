@@ -1,1 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>복음 전도 이미지 뷰어</title>
+  <style>
+    :root{
+      --bg:#0f172a;      /* slate-900 */
+      --panel:#111827;   /* gray-900 */
+      --ink:#e5e7eb;     /* gray-200 */
+      --muted:#9ca3af;   /* gray-400 */
+      --accent:#22d3ee;  /* cyan-400 */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    }
+    .app{
+      height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:.5rem; padding: .75rem; 
+    }
+    header{
+      display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+    }
+    header h1{ font-size:1rem; margin:0; color:var(--ink); opacity:.9 }
+    header .counter{ font-variant-numeric:tabular-nums; color:var(--muted) }
 
+    .stage{
+      position:relative; overflow:hidden; background:var(--panel); border-radius:1rem;
+      display:grid; place-items:center; min-height:60vh;
+      touch-action: pan-y; /* allow vertical scroll but capture horizontal swipes */
+      user-select:none;
+    }
+    img.viewer{
+      max-width:100%; max-height:82vh; object-fit:contain; display:block;
+      -webkit-user-drag:none; user-drag:none; pointer-events:none; /* smoother swipes */
+      transition: transform .18s ease;
+    }
+
+    .controls{ display:flex; align-items:center; justify-content:center; gap:.5rem; }
+    button.icon{
+      appearance:none; border:1px solid #223; background:#0b1220; color:var(--ink);
+      border-radius:.75rem; padding:.65rem .9rem; font-size:1rem; cursor:pointer;
+      box-shadow:0 6px 20px rgba(0,0,0,.35);
+    }
+    button.icon:hover{ border-color:#2a3a4a }
+    button.icon:active{ transform:translateY(1px) }
+    button[disabled]{ opacity:.4; cursor:not-allowed }
+    .dots{ display:flex; gap:.25rem; align-items:center; justify-content:center; flex-wrap:wrap; }
+    .dot{ width:.45rem; height:.45rem; border-radius:999px; background:#233; opacity:.6 }
+    .dot.active{ background:var(--accent); opacity:1; box-shadow:0 0 0 4px rgba(34,211,238,.12) }
+
+    /* edge tap zones for quick nav on desktop */
+    .tapzone{
+      position:absolute; top:0; bottom:0; width:24%; opacity:0; /* invisible */
+    }
+    .tapzone.left{ left:0 }
+    .tapzone.right{ right:0 }
+
+    @media (min-width:900px){
+      header h1{ font-size:1.05rem }
+      .stage{ min-height:72vh }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <h1>복음 전도 이미지 뷰어</h1>
+      <div class="counter" id="counter">—</div>
+    </header>
+
+    <main class="stage" id="stage" aria-live="polite">
+      <img id="viewer" class="viewer" alt="복음 전도 이미지" src="" />
+      <div class="tapzone left"  data-dir="-1" aria-hidden="true"></div>
+      <div class="tapzone right" data-dir="1"  aria-hidden="true"></div>
+    </main>
+
+    <nav class="controls">
+      <button class="icon" id="prev" aria-label="이전 (←)">◀</button>
+      <div class="dots" id="dots" aria-hidden="true"></div>
+      <button class="icon" id="next" aria-label="다음 (→)">▶</button>
+    </nav>
+  </div>
+
+  <script>
+    // === 설정 ===
+    const IMG_COUNT = 9; // 1.png ~ 9.png 까지
+    const IMAGE_PATHS = Array.from({length: IMG_COUNT}, (_,i)=>`img/${i+1}.png`);
+
+    // 요소 참조
+    const viewer  = document.getElementById('viewer');
+    const stage   = document.getElementById('stage');
+    const counter = document.getElementById('counter');
+    const dotsBox = document.getElementById('dots');
+    const btnPrev = document.getElementById('prev');
+    const btnNext = document.getElementById('next');
+
+    // 상태
+    let index = 0;
+
+    // 점(페이지 인디케이터) 생성
+    const dots = IMAGE_PATHS.map((_,i)=>{
+      const d = document.createElement('div');
+      d.className = 'dot';
+      d.title = `${i+1}`;
+      d.addEventListener('click', ()=>go(i));
+      dotsBox.appendChild(d);
+      return d;
+    });
+
+    function updateUI(){
+      viewer.src = IMAGE_PATHS[index];
+      counter.textContent = `${index+1} / ${IMAGE_PATHS.length}`;
+      dots.forEach((d,i)=>d.classList.toggle('active', i===index));
+      // 미리 불러오기 (다음/이전)
+      [index+1, index-1].forEach((j)=>{
+        if (j>=0 && j<IMAGE_PATHS.length){
+          const img = new Image(); img.src = IMAGE_PATHS[j];
+        }
+      });
+    }
+    function go(i){
+      if (i<0) i = 0; if (i>=IMAGE_PATHS.length) i = IMAGE_PATHS.length-1;
+      index = i; updateUI();
+    }
+    function next(){ if(index < IMAGE_PATHS.length-1){index++; animate(-1); updateUI();} }
+    function prev(){ if(index > 0){index--; animate(1);  updateUI();} }
+
+    // 살짝 슬라이드 애니메이션
+    function animate(direction){
+      viewer.style.transform = `translateX(${direction*22}px)`;
+      requestAnimationFrame(()=>{
+        viewer.style.transform = 'translateX(0)';
+      });
+    }
+
+    // 버튼/키보드
+    btnPrev.addEventListener('click', prev);
+    btnNext.addEventListener('click', next);
+    window.addEventListener('keydown', (e)=>{
+      if (e.key === 'ArrowLeft') prev();
+      else if (e.key === 'ArrowRight') next();
+    });
+
+    // 데스크탑 빠른 클릭 영역
+    stage.querySelector('.tapzone.left').addEventListener('click', prev);
+    stage.querySelector('.tapzone.right').addEventListener('click', next);
+
+    // 터치/드래그 슬라이드 (모바일 친화)
+    let startX = 0, tracking = false, moved = false;
+    const THRESHOLD = 40; // 스와이프 인식 임계값(px)
+
+    function onStart(x){ tracking = true; moved=false; startX = x; }
+    function onMove(x){ if(!tracking) return; const dx = x - startX; viewer.style.transform = `translateX(${dx*0.25}px)`; if(Math.abs(dx)>THRESHOLD) moved=true; }
+    function onEnd(x){ if(!tracking) return; const dx = x - startX; viewer.style.transform = 'translateX(0)'; tracking=false; if(Math.abs(dx) > THRESHOLD){ dx<0 ? next() : prev(); } }
+
+    // Touch
+    stage.addEventListener('touchstart', (e)=> onStart(e.touches[0].clientX), {passive:true});
+    stage.addEventListener('touchmove',  (e)=> onMove(e.touches[0].clientX), {passive:true});
+    stage.addEventListener('touchend',   (e)=> onEnd((e.changedTouches[0]||e.touches[0]).clientX));
+
+    // Mouse (드래그)
+    stage.addEventListener('mousedown', (e)=> onStart(e.clientX));
+    window.addEventListener('mousemove', (e)=> onMove(e.clientX));
+    window.addEventListener('mouseup',   (e)=> onEnd(e.clientX));
+
+    // 더블클릭/더블탭: 전체화면 토글 (선택)
+    stage.addEventListener('dblclick', ()=>{
+      if (!document.fullscreenElement) stage.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    });
+
+    // 시작
+    updateUI();
+  </script>
+</body>
+</html>
